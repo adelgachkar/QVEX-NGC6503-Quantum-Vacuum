@@ -1,0 +1,8 @@
+# Byte fidelity for this bundle.
+#
+# The record deliberately mixes line endings: the node documents are CRLF and the
+# annex documents are LF, and the repairs were verified byte-for-byte against the
+# pre-repair baseline. The machine-level core.autocrlf is true on this host, which
+# would silently rewrite every file on checkout. Marking everything as non-text for
+# end-of-line purposes keeps the committed bytes identical to the working tree.
+* -text

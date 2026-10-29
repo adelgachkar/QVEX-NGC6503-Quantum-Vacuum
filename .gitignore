@@ -1,0 +1,16 @@
+# Virtual environment: the suite runs on the system interpreter (3.12.6).
+.venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Editor and agent state that churns without changing the model
+.obsidian/
+.freebuff/
+
+# OS noise
+Thumbs.db
+Desktop.ini
+.DS_Store

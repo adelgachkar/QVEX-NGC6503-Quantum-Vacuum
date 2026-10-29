@@ -1,0 +1,8 @@
+{
+  "galaxy": "NGC 6503",
+  "dof": 31,
+  "chi2_total": 58346.27,
+  "chi2_reduced": 1882.14,
+  "status": "Residuals against the fixed baryonic Vbar reference only; this is not a QVEX velocity prediction or fit (see README)",
+  "friction_guard": "O1 numerical clamp max(0, F_raw); the documented law is negative beyond r ~ 12.11 kpc"
+}
