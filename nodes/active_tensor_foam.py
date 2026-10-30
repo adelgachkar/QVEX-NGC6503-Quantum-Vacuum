@@ -17,12 +17,65 @@ the document says, and it changes sign near r = 12.11 kpc. It is **not** used as
 production drag law: that role belongs to the Node 05 exchange current, whose coefficient
 is non-negative by construction and therefore cannot produce anti-damping at any radius.
 The former ``max(0, raw)`` clamp is gone, so nothing has to be hidden.
+
+Units (2026-10-30). A mass density cannot be carried as a bare number: Node 01 quotes
+``rho_0`` in ``g/cm^3``, Annex A2 bounds it in ``kg/m^3``, and a kpc/Msun solver needs
+``Msun/kpc^3``. The three are the same quantity and this module now converts explicitly:
+:data:`CANONICAL_DENSITY_UNIT` is the single canonical unit, :func:`convert_density` is the
+only permitted way to change it, and every consumer that mixes a density with a length or
+with ``G`` converts first. ``7.02e-30 g/cm^3`` is ``7.02e-27 kg/m^3`` is
+``1.037e2 Msun/kpc^3`` — a factor of 1e3 apart, not a different value.
 """
 from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass
 from typing import Dict, Union
+
+
+# --- explicit unit system ---------------------------------------------------
+#: The one unit in which a vacuum mass density is defined in this bundle.
+CANONICAL_DENSITY_UNIT = "kg/m^3"
+
+#: Exact SI definitions used for the conversions below (CODATA 2018 / IAU 2015).
+KG_PER_G = 1.0e-3
+M_PER_KPC = 3.0856775814913673e19
+KG_PER_MSUN = 1.98847e30
+
+#: ``1 kg/m^3`` expressed in each supported unit.
+_KG_M3_PER_UNIT = {
+    "kg/m^3": 1.0,
+    "g/cm^3": 1.0e3,                 # 1 g/cm^3 = 1000 kg/m^3
+    "Msun/kpc^3": KG_PER_MSUN / M_PER_KPC ** 3,   # 6.769e-29 kg/m^3
+}
+
+DENSITY_UNITS = tuple(_KG_M3_PER_UNIT)
+
+
+def convert_density(value, from_unit: str, to_unit: str):
+    """Convert a mass density between the units named in :data:`DENSITY_UNITS`.
+
+    This is the only sanctioned conversion. Raising on an unknown unit is deliberate:
+    a silently mis-typed density is the defect this function exists to prevent.
+    """
+    for unit in (from_unit, to_unit):
+        if unit not in _KG_M3_PER_UNIT:
+            raise ValueError(
+                f"unknown density unit {unit!r}; expected one of {DENSITY_UNITS}"
+            )
+    return np.asarray(value, dtype=float) * (
+        _KG_M3_PER_UNIT[from_unit] / _KG_M3_PER_UNIT[to_unit]
+    )
+
+
+def to_kg_m3(value, unit: str = CANONICAL_DENSITY_UNIT):
+    """Density in the canonical unit ``kg/m^3``."""
+    return convert_density(value, unit, CANONICAL_DENSITY_UNIT)
+
+
+def from_kg_m3(value, unit: str = CANONICAL_DENSITY_UNIT):
+    """Canonical ``kg/m^3`` density expressed in ``unit``."""
+    return convert_density(value, CANONICAL_DENSITY_UNIT, unit)
 
 
 def _nonnegative_radius(r: Union[float, np.ndarray]) -> np.ndarray:
@@ -57,14 +110,36 @@ class ActiveTensorFoamSolver:
     def r_s(self) -> float:
         return self.r_core
 
-    def vacuum_density(self, r: Union[float, np.ndarray]) -> np.ndarray:
-        """Node 01 canonical profile, in ``density_unit``."""
+    @property
+    def rho_0_kg_m3(self) -> float:
+        """``rho_0`` in the canonical unit, i.e. the unit every other consumer uses."""
+        return float(to_kg_m3(self.rho_0, self.density_unit))
+
+    @property
+    def rho_0_msun_kpc3(self) -> float:
+        """``rho_0`` in ``Msun/kpc^3``, the unit a kpc/Msun solver needs."""
+        return float(convert_density(self.rho_0, self.density_unit, "Msun/kpc^3"))
+
+    def vacuum_density(
+        self,
+        r: Union[float, np.ndarray],
+        unit: str | None = None,
+    ) -> np.ndarray:
+        """Node 01 canonical profile.
+
+        ``rho_0`` is expressed in ``self.density_unit``; the result is returned in that
+        same unit unless ``unit`` asks for another one, in which case it is converted
+        explicitly rather than reinterpreted.
+        """
         r_arr = np.asarray(r, dtype=float)
-        return (
+        rho = (
             self.rho_0
             * (1.0 + r_arr / self.lambda_coh) ** (-self.gamma_vac)
             * np.exp(-r_arr / self.R_cutoff)
         )
+        if unit is None or unit == self.density_unit:
+            return rho
+        return convert_density(rho, self.density_unit, unit)
 
     def screening(self, r: Union[float, np.ndarray]) -> np.ndarray:
         """Auxiliary screening factor: S(0) = 1, S(lambda_coh) = 0.5, S(inf) -> 0."""
@@ -154,12 +229,13 @@ class ActiveTensorFoamSolver:
     def effective_enclosed_mass(self, r: Union[float, np.ndarray]) -> np.ndarray:
         """Auxiliary rotation-curve helper — not part of Node 01 or Node 02.
 
-        Known limitation: it feeds ``rho_0`` in ``density_unit`` into a solver whose
-        ``G`` is in kpc/Msun units, i.e. the density is not converted to
-        Msun/kpc^3 (7.02e-30 g/cm^3 ~ 1.04e2 Msun/kpc^3). No test binds this helper.
+        ``G`` is in kpc (km/s)^2 / Msun, so the density is converted from
+        ``density_unit`` to ``Msun/kpc^3`` before it enters the integral. Feeding the raw
+        ``g/cm^3`` number here was a factor-1e3 unit error and is what
+        ``tests/test_density_units.py`` now binds.
         """
         r_arr = np.asarray(r, dtype=float)
-        return 4.0 * np.pi * self.rho_0 * (self.r_core ** 3) * (
+        return 4.0 * np.pi * self.rho_0_msun_kpc3 * (self.r_core ** 3) * (
             np.log(1.0 + r_arr / self.r_core) - (r_arr / (self.r_core + r_arr))
         )
 

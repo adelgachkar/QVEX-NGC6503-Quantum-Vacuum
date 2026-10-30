@@ -35,8 +35,14 @@ tags: [QVEX, Verification, CodeReview, NGC6503, FileRanking]
 | Local markdown links | `ok = 1`, `broken = 0` |
 | Duplicate filenames | **0** (the two divergent `NGC6503_QVEX_Complete_Analysis.md` copies were merged) |
 | Publication | `main = e467944` pushed as `1b8dbc9..e467944`; all 10 files present on `origin/main`; raw files verified HTTP 200 |
-| Zenodo metadata | `CITATION.cff` and `.zenodo.json` already carry the supplied identity (Gachkar, Adel · Islamic Azad University, Urmia · ORCID 0009-0006-7713-6004 · adelgachkar@gmail.com) |
+| Zenodo metadata | `CITATION.cff` and `.zenodo.json`|
+| already carry the supplied identity |(Gachkar, Adel)·|
 
+Islamic Azad University, Urmia·
+
+ORCID 0009-0006-7713-6004.
+
+[adelgachkar@gmail.com]
 **Overall evaluation:** **Approved with reservations.** The numerical pipeline executes, the node/report/test triangle is consistent for the vacuum-density model, and the package is structurally sound and published. Four reservations remain open (§4).
 
 ---
@@ -107,7 +113,7 @@ Criteria (0–10): internal consistency 30% · reproducibility/testability 30% �
 | 9 | `outputs/plots/sparc_ngc6503_fit.png` | **5.5** | Valid PNG (1350×1200, 96 KB) and correctly referenced, but not reproducible from the package |
 | 10 | `review/QVEX_NGC6503_Review_Report_v1.md` | **4.5** | Structurally valid but describes a superseded snapshot; retained for provenance only |
 
-*(This v2 report is not ranked.)*
+*(This v2 report is not ranked.)
 
 ---
 

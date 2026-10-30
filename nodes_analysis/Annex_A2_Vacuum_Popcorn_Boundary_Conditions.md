@@ -50,21 +50,44 @@ $$\nabla^\mu T_{\mu\nu}^{(\text{popcorn})} = 0$$
 
 ## 3. Mathematical Formulation & Parameter Bounds
 
+This annex governs Node 01, so it uses Node 01's symbols. Earlier revisions of this
+section wrote the same profile as $r_s$, $r_c$ and $\alpha$; that second naming is
+withdrawn because two names for one parameter is how the two documents drifted apart.
 The baseline vacuum popcorn density profile is defined as:
 
-$$\rho_{\text{popcorn}}(r) = \rho_0 \left( 1 + \frac{r}{r_s} \right)^{-\alpha} \exp\left( -\frac{r}{r_c} \right)$$
+$$\rho_{\text{popcorn}}(r) = \rho_0 \left( 1 + \frac{r}{\lambda_{\text{coh}}} \right)^{-\gamma_{\text{vac}}} \exp\left( -\frac{r}{R_{\text{cutoff}}} \right)$$
+
+with the correspondence to the withdrawn symbols: $r_s \equiv \lambda_{\text{coh}}$,
+$r_c \equiv R_{\text{cutoff}}$, $\alpha \equiv \gamma_{\text{vac}}$.
+
+### 3.1 Canonical unit of the density amplitude
+
+Canonical unit: **`kg/m^3`**. Node 01 quotes the amplitude in `g/cm^3`; that is a
+conversion, not a different quantity (`1 g/cm^3 = 1000 kg/m^3`). The same value in every
+supported unit:
+
+| Parameter | Symbol | kg/m^3 (canonical) | g/cm^3 | Msun/kpc^3 |
+| :--- | :--- | ---: | ---: | ---: |
+| Amplitude | rho_0 | 7.02e-27 | 7.02e-30 | 1.037e2 |
+
+A bound written in one unit is a bound on the density itself, so the constraint below is
+stated in the canonical unit and holds whatever unit a reader prefers.
 
 ### Parameter Constraints
 
 1. **Base Density ($\rho_0$):**
-   - Range: $0 \le \rho_0 \le 10^{-25} \, \text{kg/m}^3$
+   - Range: $0 \le \rho_0 \le 10^{-25} \, \text{kg/m}^3$ (i.e. $\le 10^{-28} \, \text{g/cm}^3$)
    - Constraint: Must be strictly non-negative.
-2. **Scale Radius ($r_s$):**
-   - Range: $r_s > 0$ (typically measured in kpc for galactic applications).
-3. **Core/Cutoff Radius ($r_c$):**
-   - Range: $r_c > r_s$ or $r_c \to \infty$ (for power-law dominant regimes).
-4. **Decay Exponent ($\alpha$):**
-   - Range: $0 \le \alpha \le 4$.
+   - Note: Node 01's $7.02 \times 10^{-27} \, \text{kg/m}^3$ sits inside this range. Read as
+     a `g/cm^3` number it would be a thousand times smaller, which is the error the
+     canonical unit exists to make visible.
+2. **Coherence Length ($\lambda_{\text{coh}}$):**
+   - Range: $\lambda_{\text{coh}} > 0$ (measured in kpc for galactic applications).
+3. **Cutoff Radius ($R_{\text{cutoff}}$):**
+   - Range: $R_{\text{cutoff}} > \lambda_{\text{coh}}$ or $R_{\text{cutoff}} \to \infty$
+     (for power-law dominant regimes).
+4. **Decay Exponent ($\gamma_{\text{vac}}$):**
+   - Range: $0 \le \gamma_{\text{vac}} \le 4$.
 
 ---
 
@@ -90,6 +113,12 @@ This document was recovered from the tail of `Annex_A_Vacuum_Popcorn_Physical_Co
 where it had been appended inside an A.5 bullet of a different annex (QVEX-ANNEX-A-POP-01).
 The two are separated because they name different targets, different baselines and different
 epistemic statuses.
+
+Later revisions change the symbols of section 3 and add section 3.1 (2026-10-30): the
+profile is stated with Node 01's `lambda_coh`, `R_cutoff` and `gamma_vac`, the withdrawn
+names are mapped one-to-one in the text, and the density amplitude is given in the
+canonical unit with its `g/cm^3` and `Msun/kpc^3` equivalents. No numeric value changed;
+only its unit was made explicit.
 
 Structural changes made during the split, and only these: the heading `Annex A:` became
 `Annex A2:`, the duplicated identifier `QVEX-ANNEX-A-POP-01` became `QVEX-ANNEX-A-BC-01`, the

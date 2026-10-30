@@ -1,7 +1,7 @@
 # Test Verification Summary
 
 - Canonical suite: `tests/` (see `pytest.ini` → `testpaths = tests`).
-- `python -m pytest -q`: **32 passed** (4 modules + 1 helper, exit 0).
+- `python -m pytest -q`: **88 passed** (8 modules + 2 helpers, exit 0) — 2026-10-30.
 - `python -m pytest -q .` (whole tree): **32 passed**, exit 0 — no collection errors.
 - Environment: Python 3.12.6 · numpy 2.4.0 · pytest 9.1.1 (`-W error::UserWarning` clean).
 
@@ -148,3 +148,185 @@ Mutation evidence (each reverted; file hash compared afterwards):
 One restore during that run re-encoded Node 02 with LF endings. It was restored from the
 untouched baseline copy byte-for-byte (sha256 `8c633774…`); the file is CRLF again and
 matches the baseline exactly.
+
+## One density, one unit (2026-10-30)
+
+The bundle carried the same vacuum amplitude in three unit domains and converted between
+them by copying the number:
+
+| Where | Stated value | Unit | Quantity in kg/m^3 |
+| :--- | ---: | :--- | ---: |
+| Node 01 | 7.02 × 10^-30 | g/cm^3 | 7.02e-27 |
+| Annex A2 | ≤ 1e-25 | kg/m^3 | bound only |
+| `effective_enclosed_mass` | 7.02e-30 | passed raw into a kpc/Msun solver | wrong by 1.5e31 |
+
+Fix, in three parts:
+
+1. `nodes/active_tensor_foam.py` publishes `CANONICAL_DENSITY_UNIT = "kg/m^3"`, the exact
+   SI/IAU constants behind the conversions, `convert_density(value, from, to)`,
+   `to_kg_m3`/`from_kg_m3`, and `rho_0_kg_m3` / `rho_0_msun_kpc3`. Unknown units raise
+   instead of being guessed. `vacuum_density(r, unit=None)` converts only when asked.
+2. `effective_enclosed_mass` converts to `Msun/kpc^3` before meeting `G` in kpc/Msun: the
+   halo mass inside 1 kpc is now 2239 Msun instead of 1.5e-28. This closes the limitation
+   that the previous revision of this file recorded as "not bound by any test".
+3. Node 01 and Annex A2 each carry the same canonical-unit table, and Annex A2 now uses
+   Node 01's symbols (`lambda_coh`, `R_cutoff`, `gamma_vac`); the withdrawn `r_s`, `r_c`,
+   `alpha` are mapped one-to-one and a test fails if they return to the profile equation.
+
+`tests/test_density_units.py` (9 tests) parses the unit table out of *both* documents,
+converts each column to kg/m^3 and compares. The comparison passes `atol=0.0` on purpose:
+the amplitudes are ~1e-27, far below NumPy's default `atol=1e-8`, so a default comparison
+called a factor-1000 error "close". That was found while proving the test could fail — the
+first mutation run passed, which is exactly the failure mode a red test is supposed to
+prevent.
+
+Mutation evidence (each reverted; both files byte-identical afterwards):
+
+| Injected defect | Result |
+| :--- | :--- |
+| Annex A2 `g/cm^3` column overwritten with the `kg/m^3` number | exit 1 (3 tests: cross-document, internal consistency, bound) |
+| code `rho_0` 7.02e-30 → 7.02e-27 | exit 1 (document binding + enclosed mass) |
+
+## Non-equilibrium front stress (2026-10-30)
+
+Nodes 01/02/05 are equilibrium laws: `Gamma(r)` is a function of radius, so it cannot
+distinguish a front that is arriving from one that has passed, and it has no memory.
+
+`nodes/non_equilibrium_stress.py` implements `Pi^{mu nu} = Delta chi^{mu nu}` in an
+orthonormal tetrad, so `u.Pi = 0`, `tr Pi = 0` and symmetry are consequences of the basis
+rather than conditions to check after the fact. Israel-Stewart relaxation gives
+`Pi(t) = -2 eta sigma (1 - exp(-t/tau))`, i.e. at a front crossing
+`Pi = -2 eta sigma (1 - exp(-De))` with `De = tau_Pi v / w`.
+
+One shell `v(r) = (v0/2)[tanh((r-r_in)/w) - tanh((r-r_out)/w)]` produces both fronts from
+one field: `sigma_leading = -v0/(3w)` (compression) and `sigma_trailing = +v0/(3w)`
+(rarefaction), so the two fronts carry opposite stress. For `tau_Pi = 20 Myr`,
+`w = 0.5 kpc`, `v0 = 0.1 kpc/Myr` the delivered stress is 22.1% of the equilibrium value —
+a discrepancy no radius-only law can express.
+
+The entropy sign is stated and tested: `Pi : sigma < 0` for a dissipative front, and the
+second law is `-(1/2) Pi : sigma = eta sigma : sigma >= 0`. `entropy_production()` returns
+the latter.
+
+Causality is enforced, not assumed: `v_c = sqrt(eta / (tau_Pi (rho+p))) <= 1`, so `tau -> 0`
+(the instantaneous parabolic law that Nodes 01/02/05 use implicitly) is rejected.
+
+Mutation evidence (each reverted; file hash compared afterwards):
+
+| Injected defect | Result |
+| :--- | :--- |
+| entropy production sign flipped (`-0.5` → `+0.5`) | exit 1 (3 tests) |
+| trailing-front shear sign flipped | exit 1 (opposite-front and dissipation tests) |
+| causality guard removed from `validate_transport` | exit 1 (causality test) |
+
+`nodes_analysis/06_Non_Equilibrium_Front_Stress_Node.md` records the algebra, the table of
+the three Deborah-number cases, and an explicit list of what is *not* implemented: no
+equations of state, no metric or field-equation solve, no angular-momentum sector, no
+observational binding, and `T_m` unspecified.
+
+## The exchange four-vector (2026-10-30)
+
+Node 05 states `J^mu = Gamma (u_v - u_m)` and then keeps `F = -Gamma du` and
+`u_m.J = -Gamma (du)^2`: a radial, scalar pair. The azimuthal component — the one that
+carries torque — was never computed, and Node 06 recorded that as a limitation.
+
+`nodes/exchange_current.py` keeps all four components:
+`J^mu = Q u^mu + f^mu` with `u.f = 0`, `Q = -u.J`, `f = h^alpha{}_nu J^nu`.
+`ExchangeCurrent` rejects a force with a component along `u`, and `from_vector` splits any
+four-vector exactly, so the split is a definition rather than a convention applied later.
+
+Contracting `nabla.T_vac = -J` with `u` gives, term by term, an identity rather than a
+model statement:
+
+```
+Q = rho_dot + (rho + p_t) Theta + Delta (s^mu s^nu d_mu u_nu) + Pi : sigma
+```
+
+with `rho_dot = u.d rho` the convective derivative. Three details are load-bearing: the
+pressure in the `p dV` term is `p_t` (not the isotropic mean), the `Delta` term is the
+stretching of the anisotropy axis along itself, and `Pi : sigma` survives where
+`Delta = 0` because the dissipative stress is its own source.
+
+The projected matter equation `(rho_m + p_m) a^alpha + h^{alpha mu} d_mu p_m = f^alpha` is
+implemented as `euler_acceleration()`, and `r f^phi` as `torque_density()`.
+
+Numerical binding: the identity is compared with an independent finite-difference
+divergence of `vacuum_stress` on a `(t, r)` grid with a moving front and an azimuthal flow.
+Relative residual falls with refinement (`1.5e-2`, `4.8e-3`, `2.7e-3` at 41, 81, 161
+points) while the signal stays at `0.16`, so what remains is discretization.
+
+One defect was found by writing the test: the first version projected with the all-up
+tensor `h^{mu nu}` applied to a contravariant vector, which does not vanish for `v = u`.
+The mixed projector `h^mu{}_nu = delta + u^mu u_nu` is the correct one, and the two are now
+separate functions with separate tests. A rest-frame-only implementation hides this error,
+which is why it survived until a boosted frame was tested.
+
+Mutation evidence (each reverted afterwards):
+
+| Injected defect | Result |
+| :--- | :--- |
+| `Pi` dropped from the stress tensor | exit 1 (identity test) |
+| `p_t` replaced by the isotropic mean | exit 1 (identity test) |
+| projection built from the all-up tensor | exit 1 (6 tests) |
+| torque sign reversed | exit 1 (2 tests) |
+| `d_t` dropped from the divergence | exit 1 (identity test) |
+| `s = e_r` handed to a moving flow | exit 1 (11 tests) |
+
+`nodes_analysis/07_Exchange_Four_Vector_Conservation_Node.md` records the algebra, the
+frame and index conventions, the torque table, and the boundary: no equations of state, no
+metric, no field-equation solve, no matrix-sector closure, no observational binding.
+
+## The `phi-r` shear channel, and what it can support (2026-10-30)
+
+A recurring claim is that a `Pi^{phi r}` component of the vacuum stress transfers angular
+momentum to the gas and thereby holds a flat rotation curve together without dark matter.
+The claim decomposes into three assertions with different verdicts, and
+`nodes/angular_momentum.py` makes each of them checkable.
+
+| Assertion | Verdict |
+| :--- | :--- |
+| `Pi^{phi r}` can transport angular momentum | true, but **not** with `Pi = Delta chi`, which has `chi^{r phi} = 0` identically |
+| That transport can hold the curve up | false: the `phi` equation holds `T^r{}_phi`, the radial balance holds `p_r`; a torque is not centripetal support |
+| So no energy source is needed | false: the torque costs `eta v^2 / r^2` and the same stress dissipates `eta v^2 / (2 r^2)` |
+
+The shear is derived rather than quoted: `sigma_{r phi} = (1/2) r d_r(gamma Omega)` follows
+from the coordinate-basis covariant derivative, including the `2/r` connection term that
+absence would triple the answer. The suite recomputes it by finite differences
+(`rtol 1e-3` at 2000 points) and checks the three standard cases: zero for solid-body
+rotation, `-v/(2r)` for a flat curve, `-3 Omega/4` for Keplerian.
+
+Numbers at `r = 10` kpc, `v = 0.1175 kpc/Myr`, `rho_v = 103.7 Msun/kpc^3` and the causality
+ceiling `eta = tau rho_v c^2 = 195`: torque density `0.2291`, `P_torque = 0.0269`,
+dissipation `0.0135`, total `0.0404 Msun/(kpc Myr^3)`. Divided by `rho_v c^2 = 9.75`, that is
+`4.14e-3` per Myr, i.e. an e-folding of 241 Myr against an orbital period of 535 Myr — the
+vacuum would be spent within one rotation. The shear stress itself is `2.29`, which is
+`6.6e-3` of the gas ram pressure for `rho_gas = 2.5e4 Msun/kpc^3` and `1.7e-3` for `1e5`.
+Reaching 10% of that ram pressure would need `eta = 1.2e4`, sixty times the causality
+ceiling.
+
+`nodes_analysis/08_Angular_Momentum_Transport_Node.md` records the derivation, the table,
+the three verdicts, and the boundary: the balance law is checked but not integrated, there
+is no gas model, no metric, and the radial part of the viscous divergence is not computed.
+
+Mutation evidence (each reverted; both files byte-identical afterwards):
+
+| Injected defect | Result |
+| :--- | :--- |
+| connection term `2 T / r` dropped from the balance | exit 1 |
+| orbital shear off by a factor of two | exit 1 (2 tests) |
+| orbital shear sign flipped | exit 1 (2 tests) |
+| viscous stress sign flipped | exit 1 (6 tests) |
+| dissipation factor dropped | exit 1 |
+| `power_budget` always returns `sustained` | exit 1 |
+| decay rate understated by nine orders of magnitude | exit 1 |
+| `chi` given an `r-phi` component | exit 1 (2 tests) |
+
+## Two repairs to files another thread had left mid-edit (2026-10-30)
+
+The suite did not collect at the start of this session; both defects were in working-tree
+changes made outside this task, and both were repaired minimally rather than reverted:
+
+| Problem | Repair |
+| :--- | :--- |
+| `tests/test_ngc6503_vacuum_nodes.py` was reduced to a body with no imports (`NameError: pytest` at collection), used `np.trapz` (removed in NumPy 2.0), and read the origin's 0 → positive step as a sign crossing | restored the import/`RTOL` header, used `np.trapezoid` when available, excluded steps at `r <= 0.5` from the crossing search |
+| `review/QVEX_NGC6503_Review_Report_v2.md` gained YAML front matter and lost its H1, so the one-title guard failed | promoted the document's own heading back to `#` |
